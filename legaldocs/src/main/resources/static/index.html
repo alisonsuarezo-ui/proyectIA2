@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalDocs — Organizador Inteligente de Contratos</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- PANTALLA DE INICIO DE SESIÓN -->
+    <div id="login-screen" class="login-wrapper">
+        <div class="login-card">
+            <div class="brand-header">
+                <span class="brand-badge">IA + RAG</span>
+                <h1>Legal<span>Docs</span></h1>
+                <p>Sistema Inteligente de Gestión Contractual</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Correo Electrónico</label>
+                    <input type="email" id="login-email" value="admin@legaldocs.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Contraseña</label>
+                    <input type="password" id="login-password" value="admin123" required>
+                </div>
+                <div id="login-error" class="alert-error hidden"></div>
+                <button type="submit" class="btn btn-primary btn-block">Iniciar Sesión</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- APLICACIÓN PRINCIPAL -->
+    <div id="app-container" class="app-layout hidden">
+        <!-- Menú Lateral -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <h2>Legal<span>Docs</span></h2>
+                <small id="user-display">Administrador</small>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-view="dashboard">📊 Dashboard</button>
+                <button class="nav-btn" data-view="contracts">📄 Contratos</button>
+                <button class="nav-btn" data-view="rag">🧠 Consulta Inteligente (RAG)</button>
+                <button class="nav-btn" data-view="obligations">📅 Obligaciones</button>
+                <button class="nav-btn" data-view="alerts">🔔 Centro de Alertas (n8n)</button>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="btn btn-outline btn-block">Cerrar Sesión</button>
+            </div>
+        </aside>
+
+        <!-- Contenido Principal -->
+        <main class="main-content">
+
+            <!-- VISTA 1: DASHBOARD -->
+            <section id="view-dashboard" class="view-section">
+                <header class="section-header">
+                    <div>
+                        <h1>Dashboard Contractual</h1>
+                        <p>Estado en tiempo real desde PostgreSQL</p>
+                    </div>
+                    <button class="btn btn-outline" onclick="loadDashboard()">↻ Actualizar</button>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-label">Total Contratos</span>
+                        <strong id="stat-total" class="stat-value">0</strong>
+                    </div>
+                    <div class="stat-card stat-ok">
+                        <span class="stat-label">Vigentes</span>
+                        <strong id="stat-active" class="stat-value">0</strong>
+                    </div>
+                    <div class="stat-card stat-warn">
+                        <span class="stat-label">Próximos a Vencer (≤30d)</span>
+                        <strong id="stat-expiring" class="stat-value">0</strong>
+                    </div>
+                    <div class="stat-card stat-danger">
+                        <span class="stat-label">Vencidos</span>
+                        <strong id="stat-expired" class="stat-value">0</strong>
+                    </div>
+                    <div class="stat-card stat-accent">
+                        <span class="stat-label">Obligaciones Pendientes</span>
+                        <strong id="stat-obligations" class="stat-value">0</strong>
+                    </div>
+                </div>
+
+                <div class="dashboard-columns">
+                    <div class="card">
+                        <h3>Próximos Vencimientos de Contratos</h3>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Título</th>
+                                        <th>Vencimiento</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dash-expiring-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Últimas Alertas Automatizadas (n8n)</h3>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Contrato</th>
+                                        <th>Tipo</th>
+                                        <th>Destinatario</th>
+                                        <th>Fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dash-alerts-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 2: GESTIÓN DE CONTRATOS (LISTADO Y REGISTRO) -->
+            <section id="view-contracts" class="view-section hidden">
+                <header class="section-header">
+                    <div>
+                        <h1>Gestión de Contratos</h1>
+                        <p>Administra contratos, carga documentos PDF y extrae cláusulas con IA</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openContractModal()">+ Nuevo Contrato</button>
+                </header>
+
+                <div class="filter-bar">
+                    <button class="chip active" onclick="filterContracts('', this)">Todos</button>
+                    <button class="chip" onclick="filterContracts('ACTIVE', this)">Vigentes</button>
+                    <button class="chip" onclick="filterContracts('EXPIRING_SOON', this)">Próximos a Vencer</button>
+                    <button class="chip" onclick="filterContracts('EXPIRED', this)">Vencidos</button>
+                </div>
+
+                <div class="card">
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Título</th>
+                                    <th>Contraparte</th>
+                                    <th>Tipo</th>
+                                    <th>Inicio</th>
+                                    <th>Vencimiento</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="contracts-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 3: DETALLE DE CONTRATO, CARGA DE PDF Y CLÁUSULAS -->
+            <section id="view-contract-detail" class="view-section hidden">
+                <header class="section-header">
+                    <div>
+                        <button class="btn btn-outline btn-sm" onclick="switchView('contracts')">← Volver al listado</button>
+                        <h1 id="detail-title" style="margin-top:0.5rem;">Detalle del Contrato</h1>
+                        <p id="detail-subtitle"></p>
+                    </div>
+                </header>
+
+                <div class="dashboard-columns">
+                    <div class="card">
+                        <h3>Información Contractual y Resumen IA</h3>
+                        <div id="detail-info" class="detail-meta"></div>
+                        <div class="summary-box">
+                            <h4>Resumen Ejecutivo Fundamentado (IA)</h4>
+                            <p id="detail-summary">Sin procesar aún. Carga un archivo PDF para extraer el resumen, cláusulas y obligaciones automáticamente.</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Cargar Documento PDF (Extracción + Embeddings)</h3>
+                        <p class="text-muted">Al subir un PDF, el backend extraerá texto con PDFBox, identificará cláusulas/obligaciones y guardará los vectores en Qdrant.</p>
+                        <form id="pdf-upload-form">
+                            <input type="hidden" id="upload-contract-id">
+                            <div class="form-group">
+                                <input type="file" id="pdf-file-input" accept="application/pdf" required>
+                            </div>
+                            <button type="submit" id="btn-upload-pdf" class="btn btn-primary">Procesar PDF con IA y Vectorizar</button>
+                        </form>
+                        <div id="upload-status" class="status-msg hidden"></div>
+
+                        <h4 style="margin-top:1.5rem;">Historial de Documentos Cargados</h4>
+                        <ul id="detail-documents-list" class="simple-list"></ul>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:1.5rem;">
+                    <h3>Cláusulas Extraídas e Indexadas en Qdrant</h3>
+                    <div id="detail-clauses-grid" class="clauses-grid"></div>
+                </div>
+
+                <div class="card" style="margin-top:1.5rem;">
+                    <h3>Obligaciones y Fechas Importantes del Contrato</h3>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Descripción de la Obligación</th>
+                                    <th>Fecha Límite</th>
+                                    <th>Responsable</th>
+                                    <th>Estado</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-obligations-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 4: CONSULTA INTELIGENTE RAG -->
+            <section id="view-rag" class="view-section hidden">
+                <header class="section-header">
+                    <div>
+                        <h1>Consulta Documental Inteligente (Sistema RAG)</h1>
+                        <p>Búsqueda semántica en Qdrant + Generación fundamentada con referencias exactas de contrato, cláusula y página.</p>
+                    </div>
+                </header>
+
+                <div class="card">
+                    <form id="rag-form" class="rag-controls">
+                        <div class="rag-filters">
+                            <div class="form-group">
+                                <label for="rag-contract-select">Ámbito de Contrato</label>
+                                <select id="rag-contract-select">
+                                    <option value="">Todos los contratos registrados</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="rag-category-select">Filtro de Categoría de Cláusula</label>
+                                <select id="rag-category-select">
+                                    <option value="">Todas las secciones y cláusulas</option>
+                                    <option value="OBLIGATION">Obligaciones</option>
+                                    <option value="PENALTY">Penalidades y Multas</option>
+                                    <option value="TERMINATION">Terminación Anticipada</option>
+                                    <option value="CONFIDENTIALITY">Confidencialidad</option>
+                                    <option value="PAYMENT">Pagos y Facturación</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="rag-question">Pregunta sobre los contratos</label>
+                            <div class="rag-input-row">
+                                <input type="text" id="rag-question" placeholder="Ej: ¿Qué dice sobre la terminación anticipada o qué penalizaciones contempla?" required>
+                                <button type="submit" id="btn-rag-ask" class="btn btn-primary">Consultar Documentos</button>
+                            </div>
+                        </div>
+
+                        <div class="quick-questions">
+                            <span>Consultas rápidas:</span>
+                            <button type="button" class="chip" onclick="setQuickQuestion('¿Cuáles son las obligaciones principales de este contrato?')">¿Obligaciones?</button>
+                            <button type="button" class="chip" onclick="setQuickQuestion('¿Qué dice sobre la terminación anticipada?')">¿Terminación anticipada?</button>
+                            <button type="button" class="chip" onclick="setQuickQuestion('¿Qué penalizaciones o multas contempla?')">¿Penalizaciones?</button>
+                            <button type="button" class="chip" onclick="setQuickQuestion('¿Qué cláusulas hablan de confidencialidad?')">¿Confidencialidad?</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="rag-result-container" class="card hidden" style="margin-top:1.5rem;">
+                    <h3>Respuesta Fundamentada</h3>
+                    <div id="rag-answer-box" class="rag-answer"></div>
+
+                    <h4 style="margin-top:1.5rem;">Referencias Originales Recuperadas de Qdrant</h4>
+                    <div id="rag-references-grid" class="clauses-grid"></div>
+                </div>
+            </section>
+
+            <!-- VISTA 5: GESTIÓN DE OBLIGACIONES -->
+            <section id="view-obligations" class="view-section hidden">
+                <header class="section-header">
+                    <div>
+                        <h1>Gestión de Obligaciones Contractuales</h1>
+                        <p>Control de hitos, entregables y fechas importantes extraídas de los contratos</p>
+                    </div>
+                </header>
+                <div class="card">
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Descripción</th>
+                                    <th>Fecha Límite</th>
+                                    <th>Responsable</th>
+                                    <th>Estado</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-obligations-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 6: CENTRO DE ALERTAS Y N8N -->
+            <section id="view-alerts" class="view-section hidden">
+                <header class="section-header">
+                    <div>
+                        <h1>Centro de Alertas y Automatización (n8n)</h1>
+                        <p>Monitoreo de alertas a 30, 15 y 7 días y registro anti-duplicados</p>
+                    </div>
+                    <button class="btn btn-outline" onclick="loadAlertsCenter()">↻ Refrescar Alertas</button>
+                </header>
+
+                <div class="dashboard-columns">
+                    <div class="card">
+                        <h3>Notificaciones Pendientes de Envío por n8n</h3>
+                        <p class="text-muted">Contratos (30, 15, 7 días) y obligaciones pendientes que n8n procesará en su ejecución programada:</p>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Contrato</th>
+                                        <th>Umbral</th>
+                                        <th>Días Rest.</th>
+                                        <th>Destinatario</th>
+                                        <th>Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pending-notifications-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Historial de Alertas Enviadas (PostgreSQL)</h3>
+                        <p class="text-muted">Confirmadas mediante el endpoint <code>POST /api/automation/alerts-ack</code>:</p>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Contrato</th>
+                                        <th>Tipo Alerta</th>
+                                        <th>Correo</th>
+                                        <th>Fecha Envío</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sent-alerts-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- MODAL PARA CREAR / EDITAR CONTRATO -->
+    <div id="contract-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <header class="modal-header">
+                <h3 id="modal-title">Registrar Nuevo Contrato</h3>
+                <button class="close-btn" onclick="closeContractModal()">✕</button>
+            </header>
+            <form id="contract-form">
+                <input type="hidden" id="contract-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="contract-code">Código Interno *</label>
+                        <input type="text" id="contract-code" placeholder="CNT-2026-001" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contract-type">Tipo de Contrato</label>
+                        <select id="contract-type"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="contract-title">Título del Contrato *</label>
+                    <input type="text" id="contract-title" placeholder="Servicios de Desarrollo y Soporte Cloud" required>
+                </div>
+                <div class="form-group">
+                    <label for="contract-counterparty">Contraparte (Empresa / Proveedor / Cliente) *</label>
+                    <input type="text" id="contract-counterparty" placeholder="TechSolutions S.A.S." required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="contract-start">Fecha de Inicio *</label>
+                        <input type="date" id="contract-start" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contract-end">Fecha de Vencimiento *</label>
+                        <input type="date" id="contract-end" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="contract-observations">Observaciones</label>
+                    <textarea id="contract-observations" rows="3" placeholder="Notas internas o responsable del seguimiento..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" onclick="closeContractModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Guardar Contrato</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

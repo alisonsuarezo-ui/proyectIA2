@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: legaldocs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-legaldocs_db}
+      POSTGRES_USER: ${POSTGRES_USER:-legaldocs_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-legaldocs_secret_pass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - legaldocs-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legaldocs_user} -d ${POSTGRES_DB:-legaldocs_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.3
+    container_name: legaldocs-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_REST_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - legaldocs-net
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: legaldocs-n8n
+    restart: unless-stopped
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-true}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-admin_n8n_pass}
+      - GENERIC_TIMEZONE=America/Bogota
+      - WEBHOOK_URL=http://n8n:5678/
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - legaldocs-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: legaldocs-backend
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-legaldocs_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-legaldocs_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-legaldocs_secret_pass}
+      SPRING_AI_QDRANT_HOST: qdrant
+      SPRING_AI_QDRANT_PORT: 6334
+      SPRING_AI_QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION:-legaldocs_vectors}
+      SPRING_AI_OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SPRING_AI_OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      SPRING_AI_OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      APP_UPLOAD_DIR: /app/uploads
+      APP_AUTOMATION_API_KEY: ${AUTOMATION_API_KEY:-n8n_internal_secret_key_2026}
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - legaldocs-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  n8n_data:
+  uploads_data:
+
+networks:
+  legaldocs-net:
+    driver: bridge

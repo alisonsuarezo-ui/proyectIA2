@@ -1,0 +1,143 @@
+{
+  "name": "LegalDocs - Automatización de Vencimientos y Obligaciones",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "1a2b3c4d-0001-4000-8000-000000000001",
+      "name": "Ejecución Diaria 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 240]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "legaldocs-trigger-alerts",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "1a2b3c4d-0002-4000-8000-000000000002",
+      "name": "Webhook Disparo Manual",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 420],
+      "webhookId": "legaldocs-trigger-alerts"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://backend:8080/api/automation/pending-notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Automation-Key",
+              "value": "n8n_internal_secret_key_2026"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1a2b3c4d-0003-4000-8000-000000000003",
+      "name": "Consultar Vencimientos (Spring Boot)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.contractId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a2b3c4d-0004-4000-8000-000000000004",
+      "name": "¿Hay Alertas Pendientes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 320]
+    },
+    {
+      "parameters": {
+        "fromEmail": "notificaciones@legaldocs.empresa.com",
+        "toEmail": "={{ $json.recipientEmail }}",
+        "subject": "={{ $json.subject }}",
+        "html": "=<h3>Alerta Automática — Sistema LegalDocs</h3>\n<p><strong>Contrato:</strong> {{ $json.contractCode }} - {{ $json.contractTitle }}</p>\n<p><strong>Contraparte:</strong> {{ $json.counterparty }}</p>\n<p><strong>Tipo de Alerta:</strong> {{ $json.alertType }} ({{ $json.daysRemaining }} días restantes)</p>\n<p><strong>Fecha Límite:</strong> {{ $json.dueDate }}</p>\n<hr/>\n<p>{{ $json.messageDetail }}</p>\n<p><small>Este es un aviso preventivo de organización documental generado por LegalDocs y n8n.</small></p>",
+        "options": {}
+      },
+      "id": "1a2b3c4d-0005-4000-8000-000000000005",
+      "name": "Enviar Correo de Alerta (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [940, 260],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8080/api/automation/alerts-ack",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Automation-Key",
+              "value": "n8n_internal_secret_key_2026"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "= {\n  \"contractId\": {{ $('¿Hay Alertas Pendientes?').item.json.contractId }},\n  \"obligationId\": {{ $('¿Hay Alertas Pendientes?').item.json.obligationId || null }},\n  \"alertType\": \"{{ $('¿Hay Alertas Pendientes?').item.json.alertType }}\",\n  \"recipientEmail\": \"{{ $('¿Hay Alertas Pendientes?').item.json.recipientEmail }}\",\n  \"status\": \"SENT\"\n}",
+        "options": {}
+      },
+      "id": "1a2b3c4d-0006-4000-8000-000000000006",
+      "name": "Registrar Alerta en PostgreSQL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 260]
+    }
+  ],
+  "connections": {
+    "Ejecución Diaria 8AM": {
+      "main": [[{ "node": "Consultar Vencimientos (Spring Boot)", "type": "main", "index": 0 }]]
+    },
+    "Webhook Disparo Manual": {
+      "main": [[{ "node": "Consultar Vencimientos (Spring Boot)", "type": "main", "index": 0 }]]
+    },
+    "Consultar Vencimientos (Spring Boot)": {
+      "main": [[{ "node": "¿Hay Alertas Pendientes?", "type": "main", "index": 0 }]]
+    },
+    "¿Hay Alertas Pendientes?": {
+      "main": [[{ "node": "Enviar Correo de Alerta (SMTP)", "type": "main", "index": 0 }]]
+    },
+    "Enviar Correo de Alerta (SMTP)": {
+      "main": [[{ "node": "Registrar Alerta en PostgreSQL", "type": "main", "index": 0 }]]
+    }
+  }
+}

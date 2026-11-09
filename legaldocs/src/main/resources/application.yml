@@ -1,0 +1,47 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: legaldocs
+
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/legaldocs_db}
+    username: ${SPRING_DATASOURCE_USERNAME:legaldocs_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:legaldocs_secret_pass}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  ai:
+    openai:
+      api-key: ${SPRING_AI_OPENAI_API_KEY:demo-key}
+      chat:
+        options:
+          model: ${SPRING_AI_OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: 0.1
+      embedding:
+        options:
+          model: ${SPRING_AI_OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      qdrant:
+        host: ${SPRING_AI_QDRANT_HOST:localhost}
+        port: ${SPRING_AI_QDRANT_PORT:6334}
+        collection-name: ${SPRING_AI_QDRANT_COLLECTION_NAME:legaldocs_vectors}
+        initialize-schema: true
+
+app:
+  upload-dir: ${APP_UPLOAD_DIR:./uploads}
+  automation-api-key: ${APP_AUTOMATION_API_KEY:n8n_internal_secret_key_2026}
